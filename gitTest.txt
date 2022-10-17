@@ -1,2 +1,1 @@
-test
-hot-fix
+this is my first git project test!
