@@ -1,0 +1,148 @@
+package com.epoint.ah.psp.ztbdataex;
+
+import java.util.HashSet;
+import java.util.Set;
+
+/**
+ * 改写twitter的snowflake算法 -- java实现
+ * 
+ */
+public class UidGenerator
+{
+
+    /**
+     * 起始的时间戳(秒)
+     */
+    private final static long START_STMP = 1684252800246L / 1000; // 2023-05-17
+                                                                  // 00:00:00
+
+    /**
+     * 每一部分占用的位数
+     */
+    private final static long SEQUENCE_BIT = 9; // 序列号占用的位数，9位时每秒最多512个序号
+
+    /**
+     * 每一部分的最大值
+     */
+    private final static long MAX_SEQUENCE = -1L ^ (-1L << SEQUENCE_BIT);
+
+    /**
+     * 每一部分向左的位移
+     */
+    private final static long TIMESTMP_LEFT = SEQUENCE_BIT;
+
+    private long sequence = 0L; // 序列号
+    private long lastStmp = -1L;// 上一次时间戳
+
+    private UidGenerator() {
+    }
+
+    private static class UidGeneratorHolder
+    {
+        private static final UidGenerator INSTANCE = new UidGenerator();
+    }
+
+    /**
+     * 单例入口
+     * 
+     * @return
+     */
+    public static UidGenerator getInstance() {
+        return UidGeneratorHolder.INSTANCE;
+    }
+
+    /**
+     * 产生下一个ID
+     *
+     * @return
+     */
+    public synchronized long nextId() {
+        long currStmp = getNewstmp();
+        if (currStmp < lastStmp) {
+            throw new RuntimeException("Clock moved backwards.  Refusing to generate id");
+        }
+
+        if (currStmp == lastStmp) {
+            // 相同毫秒内，序列号自增
+            sequence = (sequence + 1) & MAX_SEQUENCE;
+            // 同一毫秒的序列数已经达到最大
+            if (sequence == 0L) {
+                currStmp = getNextMill();
+            }
+        }
+        else {
+            // 不同毫秒内，序列号置为0
+            sequence = 0L;
+        }
+
+        lastStmp = currStmp;
+
+        return (currStmp - START_STMP) << TIMESTMP_LEFT // 时间戳部分
+                | sequence; // 序列号部分
+    }
+
+    private final static int MINIDLEN = 8;
+
+    /**
+     * 产生一个固定位数ID
+     * 
+     * @param len
+     *            最低8位，推荐14位以上
+     * @return
+     */
+    public synchronized String nextId(int len) {
+        if (len < MINIDLEN) {
+            throw new IllegalArgumentException("len can't be lesser than " + MINIDLEN);
+        }
+        long id = nextId();
+        String sId = Long.toString(id);
+        if (sId.length() == len) {
+            return sId;
+        }
+        else if (sId.length() > len) {
+            return sId.substring(sId.length() - len);
+        }
+        else {
+            return String.format("%0" + len + "d", id);
+        }
+    }
+
+    private long getNextMill() {
+        long mill = getNewstmp();
+        while (mill <= lastStmp) {
+            mill = getNewstmp();
+        }
+        return mill;
+    }
+
+    private long getNewstmp() {
+        return System.currentTimeMillis() / 1000;
+    }
+
+    public static void main(String[] args) {
+
+        // Calendar c = Calendar.getInstance();
+        // c.set(2023, 4, 17, 0, 0, 0);
+        // System.out.println(c.getTime());
+        // System.out.println(c.getTimeInMillis());
+
+        // System.out.println(System.currentTimeMillis() / 1000);
+        // for (int i = 0; i < (1 << 12); i++) {
+        // System.out.println(UidGenerator.getInstance().nextId(8));
+        // }
+
+        Set<String> idSet = new HashSet<>();
+        while (true) {
+            String id = UidGenerator.getInstance().nextId(8);
+            if (idSet.contains(id)) {
+                System.out.println("Duplicate id: " + id); // 输出重复的ID
+                break;
+            }
+            else {
+                idSet.add(id);
+            }
+            System.out.println(id);
+        }
+
+    }
+}
